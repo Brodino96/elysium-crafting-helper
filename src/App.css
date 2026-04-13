@@ -1,0 +1,671 @@
+/* ============================================
+   Elysium Crafting Helper — Dark Minecraft Theme
+   ============================================ */
+
+/* --- CSS Reset & Base --- */
+
+@import url('https://fonts.googleapis.com/css2?family=Silkscreen:wght@400;700&display=swap');
+
+:root {
+  /* Minecraft-inspired dark palette */
+  --bg-darkest: #1a1a1e;
+  --bg-dark: #2d2d33;
+  --bg-medium: #3a3a42;
+  --bg-light: #4a4a54;
+  --bg-slot: #8b8b8b;
+  --bg-slot-inner: #555555;
+
+  /* Slot bevel colors (Minecraft inventory style) */
+  --slot-border-light: #c6c6c6;
+  --slot-border-dark: #373737;
+  --slot-border-mid: #8b8b8b;
+
+  /* Text colors */
+  --text-primary: #e0e0e0;
+  --text-secondary: #a0a0a0;
+  --text-muted: #707070;
+  --text-title: #55ff55;
+
+  /* Accent colors */
+  --accent-green: #55ff55;
+  --accent-green-dark: #2a8a2a;
+  --accent-red: #ff5555;
+  --accent-red-dark: #8a2a2a;
+  --accent-blue: #5555ff;
+  --accent-gold: #ffaa00;
+
+  /* Sizes */
+  --slot-size: 48px;
+  --texture-size: 32px;
+  --item-card-size: 52px;
+  --item-texture-size: 40px;
+  --border-radius: 0px; /* Minecraft: no border radius */
+
+  font-family: 'Silkscreen', monospace, sans-serif;
+  font-size: 13px;
+  color: var(--text-primary);
+  background-color: var(--bg-darkest);
+}
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+/* Scrollbar styling */
+::-webkit-scrollbar {
+  width: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--bg-dark);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--bg-light);
+  border: 1px solid var(--bg-medium);
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--slot-border-mid);
+}
+
+/* Pixel-perfect image rendering for MC textures */
+img {
+  image-rendering: pixelated;
+  image-rendering: -moz-crisp-edges;
+}
+
+/* --- App Layout --- */
+
+.app {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  overflow: hidden;
+  background: var(--bg-darkest);
+}
+
+.app__content {
+  display: flex;
+  flex: 1;
+  overflow: hidden;
+  gap: 0;
+}
+
+.app__error {
+  padding: 8px 16px;
+  background: var(--accent-red-dark);
+  color: white;
+  font-size: 12px;
+  border-top: 2px solid var(--accent-red);
+}
+
+/* --- Toolbar --- */
+
+.toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 16px;
+  background: var(--bg-dark);
+  border-bottom: 3px solid var(--slot-border-dark);
+  gap: 16px;
+  min-height: 52px;
+}
+
+.toolbar__brand {
+  flex-shrink: 0;
+}
+
+.toolbar__title {
+  font-size: 16px;
+  color: var(--text-title);
+  text-shadow: 1px 1px 0px #2a5a2a;
+  letter-spacing: 1px;
+}
+
+.toolbar__folders {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+/* --- Minecraft-style Buttons --- */
+
+.mc-btn {
+  font-family: 'Silkscreen', monospace;
+  font-size: 12px;
+  padding: 6px 12px;
+  border: none;
+  cursor: pointer;
+  color: var(--text-primary);
+  background: var(--bg-medium);
+  position: relative;
+  white-space: nowrap;
+
+  /* Minecraft bevel */
+  border-top: 2px solid var(--slot-border-light);
+  border-left: 2px solid var(--slot-border-light);
+  border-bottom: 2px solid var(--slot-border-dark);
+  border-right: 2px solid var(--slot-border-dark);
+}
+
+.mc-btn:hover:not(:disabled) {
+  background: var(--bg-light);
+}
+
+.mc-btn:active:not(:disabled) {
+  border-top: 2px solid var(--slot-border-dark);
+  border-left: 2px solid var(--slot-border-dark);
+  border-bottom: 2px solid var(--slot-border-light);
+  border-right: 2px solid var(--slot-border-light);
+}
+
+.mc-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.mc-btn--primary {
+  background: var(--accent-green-dark);
+  color: white;
+}
+
+.mc-btn--primary:hover:not(:disabled) {
+  background: #3aaf3a;
+}
+
+.mc-btn--danger {
+  background: var(--accent-red-dark);
+  color: white;
+}
+
+.mc-btn--danger:hover:not(:disabled) {
+  background: #af3a3a;
+}
+
+.mc-btn--active {
+  background: var(--accent-green-dark);
+  color: white;
+}
+
+.mc-btn--sm {
+  padding: 3px 8px;
+  font-size: 11px;
+}
+
+/* --- Minecraft-style Input --- */
+
+.mc-input {
+  font-family: 'Silkscreen', monospace;
+  font-size: 12px;
+  padding: 6px 10px;
+  background: #000000;
+  color: var(--text-primary);
+  border: 2px solid var(--bg-light);
+  outline: none;
+  width: 100%;
+}
+
+.mc-input:focus {
+  border-color: var(--accent-green);
+}
+
+.mc-input::placeholder {
+  color: var(--text-muted);
+}
+
+/* --- Minecraft-style Checkbox --- */
+
+.mc-checkbox {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  font-size: 12px;
+  color: var(--text-secondary);
+  user-select: none;
+}
+
+.mc-checkbox input[type="checkbox"] {
+  appearance: none;
+  width: 16px;
+  height: 16px;
+  background: #000;
+  border: 2px solid var(--bg-light);
+  cursor: pointer;
+  position: relative;
+}
+
+.mc-checkbox input[type="checkbox"]:checked {
+  border-color: var(--accent-green);
+}
+
+.mc-checkbox input[type="checkbox"]:checked::after {
+  content: '';
+  position: absolute;
+  top: 1px;
+  left: 1px;
+  width: 10px;
+  height: 10px;
+  background: var(--accent-green);
+}
+
+/* --- Number Input --- */
+
+.mc-number {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.mc-number input[type="number"] {
+  font-family: 'Silkscreen', monospace;
+  font-size: 12px;
+  width: 50px;
+  padding: 4px 6px;
+  background: #000;
+  color: var(--text-primary);
+  border: 2px solid var(--bg-light);
+  outline: none;
+  text-align: center;
+}
+
+.mc-number input[type="number"]:focus {
+  border-color: var(--accent-green);
+}
+
+/* Remove number spinners */
+.mc-number input[type="number"]::-webkit-inner-spin-button,
+.mc-number input[type="number"]::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+.mc-number input[type="number"] {
+  -moz-appearance: textfield;
+}
+
+/* --- Item Browser (Left Panel) --- */
+
+.item-browser {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-dark);
+  border-right: 3px solid var(--slot-border-dark);
+  overflow: hidden;
+  flex-shrink: 0;
+}
+
+.item-browser__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 14px 8px;
+}
+
+.item-browser__title {
+  font-size: 14px;
+  color: var(--accent-gold);
+  text-shadow: 1px 1px 0px #5a3a00;
+}
+
+.item-browser__count {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.item-browser__search {
+  padding: 0 12px 10px;
+}
+
+.item-browser__list {
+  flex: 1;
+  overflow-y: auto;
+  padding: 0 8px 8px;
+}
+
+.item-browser__loading,
+.item-browser__empty {
+  padding: 24px 16px;
+  text-align: center;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.item-browser__warnings {
+  border-top: 2px solid var(--accent-gold);
+  padding: 6px 10px;
+  max-height: 80px;
+  overflow-y: auto;
+  background: rgba(255, 170, 0, 0.1);
+}
+
+.item-browser__warning {
+  font-size: 10px;
+  color: var(--accent-gold);
+  padding: 2px 0;
+}
+
+/* Resize handle on the right edge of the item browser */
+.item-browser__resize-handle {
+  position: absolute;
+  top: 0;
+  right: -2px;
+  width: 6px;
+  height: 100%;
+  cursor: col-resize;
+  z-index: 10;
+  background: transparent;
+  transition: background 0.15s;
+}
+
+.item-browser__resize-handle:hover,
+.item-browser__resize-handle:active {
+  background: var(--accent-green);
+  opacity: 0.4;
+}
+
+/* --- Mod Group --- */
+
+.mod-group {
+  margin-bottom: 2px;
+}
+
+.mod-group__header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  padding: 6px 8px;
+  background: var(--bg-medium);
+  border: none;
+  cursor: pointer;
+  color: var(--text-primary);
+  font-family: 'Silkscreen', monospace;
+  font-size: 11px;
+  text-align: left;
+
+  border-top: 1px solid var(--slot-border-light);
+  border-bottom: 1px solid var(--slot-border-dark);
+}
+
+.mod-group__header:hover {
+  background: var(--bg-light);
+}
+
+.mod-group__arrow {
+  font-size: 8px;
+  color: var(--text-muted);
+  transition: transform 0.15s;
+  display: inline-block;
+}
+
+.mod-group__arrow--open {
+  transform: rotate(90deg);
+}
+
+.mod-group__name {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mod-group__count {
+  color: var(--text-muted);
+  font-size: 10px;
+}
+
+.mod-group__items {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(var(--item-card-size), 1fr));
+  gap: 3px;
+  padding: 6px;
+  background: var(--bg-darkest);
+
+  /* Skip rendering when scrolled out of view */
+  content-visibility: auto;
+  contain-intrinsic-size: auto 200px;
+}
+
+/* --- Item Card --- */
+
+.item-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 4px;
+  cursor: grab;
+  position: relative;
+
+  /* Minecraft slot style */
+  background: var(--bg-slot-inner);
+  border-top: 2px solid var(--slot-border-dark);
+  border-left: 2px solid var(--slot-border-dark);
+  border-bottom: 2px solid var(--slot-border-light);
+  border-right: 2px solid var(--slot-border-light);
+}
+
+.item-card:hover {
+  background: var(--bg-light);
+  border-color: var(--accent-green);
+}
+
+.item-card--dragging {
+  opacity: 0.4;
+}
+
+.item-card__texture-wrapper {
+  width: var(--item-texture-size);
+  height: var(--item-texture-size);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.item-card__texture {
+  width: var(--item-texture-size);
+  height: var(--item-texture-size);
+  object-fit: contain;
+}
+
+.item-card__placeholder {
+  width: var(--item-texture-size);
+  height: var(--item-texture-size);
+  /* Minecraft missing texture pattern (purple/black checkerboard) */
+  background: repeating-conic-gradient(
+    #ff00ff 0% 25%, #000000 0% 50%
+  ) 0 0 / 8px 8px;
+}
+
+.item-card__name {
+  font-size: 8px;
+  color: var(--text-secondary);
+  text-align: center;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  width: 100%;
+  margin-top: 2px;
+  line-height: 1.1;
+}
+
+/* --- Crafting Area (Right Panel) --- */
+
+.crafting-area {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  gap: 20px;
+  background: var(--bg-darkest);
+}
+
+.crafting-area__header {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+}
+
+.crafting-area__title {
+  font-size: 16px;
+  color: var(--accent-gold);
+  text-shadow: 1px 1px 0px #5a3a00;
+}
+
+.crafting-area__grid-selector {
+  display: flex;
+  gap: 6px;
+}
+
+.crafting-area__controls {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+.crafting-area__actions {
+  display: flex;
+  gap: 8px;
+}
+
+/* --- Crafting Grid --- */
+
+.crafting-grid {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 20px;
+  background: var(--bg-dark);
+
+  /* Outer bevel like MC inventory panel */
+  border-top: 3px solid var(--slot-border-light);
+  border-left: 3px solid var(--slot-border-light);
+  border-bottom: 3px solid var(--slot-border-dark);
+  border-right: 3px solid var(--slot-border-dark);
+}
+
+.crafting-grid__inputs {
+  gap: 2px;
+}
+
+.crafting-grid__arrow {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 8px;
+}
+
+.crafting-grid__outputs {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+/* --- Grid Slot --- */
+
+.grid-slot {
+  width: var(--slot-size);
+  height: var(--slot-size);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  cursor: pointer;
+
+  /* Minecraft inventory slot (inset bevel) */
+  background: var(--bg-slot-inner);
+  border-top: 2px solid var(--slot-border-dark);
+  border-left: 2px solid var(--slot-border-dark);
+  border-bottom: 2px solid var(--slot-border-light);
+  border-right: 2px solid var(--slot-border-light);
+}
+
+.grid-slot--output {
+  width: 56px;
+  height: 56px;
+
+  /* Output slot has a slightly different bg */
+  background: var(--bg-slot-inner);
+  border-top: 3px solid var(--slot-border-dark);
+  border-left: 3px solid var(--slot-border-dark);
+  border-bottom: 3px solid var(--slot-border-light);
+  border-right: 3px solid var(--slot-border-light);
+}
+
+.grid-slot--over {
+  background: rgba(85, 255, 85, 0.15);
+  border-color: var(--accent-green) !important;
+}
+
+.grid-slot--filled {
+  /* subtle highlight */
+}
+
+.grid-slot__item {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.grid-slot__texture {
+  width: var(--texture-size);
+  height: var(--texture-size);
+  object-fit: contain;
+}
+
+.grid-slot--output .grid-slot__texture {
+  width: 40px;
+  height: 40px;
+}
+
+.grid-slot__placeholder-texture {
+  width: var(--texture-size);
+  height: var(--texture-size);
+  background: repeating-conic-gradient(
+    #ff00ff 0% 25%, #000000 0% 50%
+  ) 0 0 / 8px 8px;
+}
+
+.grid-slot__label {
+  position: absolute;
+  bottom: -14px;
+  font-size: 8px;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+/* --- Drag Overlay --- */
+
+.drag-overlay {
+  width: var(--texture-size);
+  height: var(--texture-size);
+  opacity: 0.85;
+  pointer-events: none;
+  filter: drop-shadow(0 0 4px rgba(85, 255, 85, 0.5));
+}
+
+.drag-overlay__texture {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.drag-overlay__placeholder {
+  width: 100%;
+  height: 100%;
+  background: repeating-conic-gradient(
+    #ff00ff 0% 25%, #000000 0% 50%
+  ) 0 0 / 8px 8px;
+}
