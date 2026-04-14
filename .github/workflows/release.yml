@@ -1,0 +1,102 @@
+name: Release
+
+on:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: write
+
+jobs:
+  check-version:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.get-version.outputs.version }}
+      should_release: ${{ steps.check-release.outputs.should_release }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Get version from package.json
+        id: get-version
+        run: echo "version=$(jq -r .version package.json)" >> "$GITHUB_OUTPUT"
+
+      - name: Check if release already exists
+        id: check-release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if gh release view "v${{ steps.get-version.outputs.version }}" --repo "$GITHUB_REPOSITORY" &>/dev/null; then
+            echo "Release v${{ steps.get-version.outputs.version }} already exists, skipping."
+            echo "should_release=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "No release found for v${{ steps.get-version.outputs.version }}, will build and release."
+            echo "should_release=true" >> "$GITHUB_OUTPUT"
+          fi
+
+  build-and-release:
+    needs: check-version
+    if: needs.check-version.outputs.should_release == 'true'
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: ubuntu-22.04
+            args: "--bundles deb,rpm"
+          - platform: windows-latest
+            args: "--bundles nsis"
+    runs-on: ${{ matrix.platform }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install Linux system dependencies
+        if: matrix.platform == 'ubuntu-22.04'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
+
+      - name: Install frontend dependencies
+        run: bun install
+
+      - name: Sync version from package.json
+        shell: bash
+        env:
+          VERSION: ${{ needs.check-version.outputs.version }}
+        run: |
+          node -e "
+            const fs = require('fs');
+            const version = process.env.VERSION;
+
+            // Update tauri.conf.json
+            const confPath = 'src-tauri/tauri.conf.json';
+            const conf = JSON.parse(fs.readFileSync(confPath, 'utf8'));
+            conf.version = version;
+            fs.writeFileSync(confPath, JSON.stringify(conf, null, 2) + '\n');
+            console.log('Updated tauri.conf.json to version ' + version);
+
+            // Update Cargo.toml (replace the package version, first occurrence of ^version = ...)
+            const cargoPath = 'src-tauri/Cargo.toml';
+            let cargo = fs.readFileSync(cargoPath, 'utf8');
+            cargo = cargo.replace(/^version = \".*\"/m, 'version = \"' + version + '\"');
+            fs.writeFileSync(cargoPath, cargo);
+            console.log('Updated Cargo.toml to version ' + version);
+          "
+
+      - name: Build and upload to release
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tagName: v${{ needs.check-version.outputs.version }}
+          releaseName: v${{ needs.check-version.outputs.version }}
+          releaseBody: "Release v${{ needs.check-version.outputs.version }}"
+          releaseDraft: false
+          prerelease: false
+          tauriScript: bun tauri
+          args: ${{ matrix.args }}
