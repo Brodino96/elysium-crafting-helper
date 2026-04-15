@@ -43,8 +43,14 @@ jobs:
         include:
           - platform: ubuntu-22.04
             args: "--bundles deb,rpm"
+            rust-target: x86_64-unknown-linux-gnu
+            binary-name: elysium-crafting-helper
+            archive-ext: .tar.gz
           - platform: windows-latest
             args: "--bundles nsis"
+            rust-target: x86_64-pc-windows-msvc
+            binary-name: elysium-crafting-helper.exe
+            archive-ext: .zip
     runs-on: ${{ matrix.platform }}
     steps:
       - uses: actions/checkout@v6.0.2
@@ -76,3 +82,25 @@ jobs:
           prerelease: false
           tauriScript: bun tauri
           args: ${{ matrix.args }}
+
+      - name: Package binary for cargo-binstall (Linux)
+        if: matrix.platform == 'ubuntu-22.04'
+        run: |
+          ARCHIVE_NAME="elysium-crafting-helper-${{ matrix.rust-target }}.tar.gz"
+          cp "src-tauri/target/release/${{ matrix.binary-name }}" "${{ matrix.binary-name }}"
+          tar czf "$ARCHIVE_NAME" "${{ matrix.binary-name }}"
+          echo "ARCHIVE_NAME=$ARCHIVE_NAME" >> "$GITHUB_ENV"
+
+      - name: Package binary for cargo-binstall (Windows)
+        if: matrix.platform == 'windows-latest'
+        shell: pwsh
+        run: |
+          $archiveName = "elysium-crafting-helper-${{ matrix.rust-target }}.zip"
+          Copy-Item "src-tauri/target/release/${{ matrix.binary-name }}" "${{ matrix.binary-name }}"
+          Compress-Archive -Path "${{ matrix.binary-name }}" -DestinationPath "$archiveName"
+          echo "ARCHIVE_NAME=$archiveName" >> $env:GITHUB_ENV
+
+      - name: Upload binary archive to release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release upload "v${{ needs.check-version.outputs.version }}" "${{ env.ARCHIVE_NAME }}" --repo "${{ github.repository }}" --clobber
