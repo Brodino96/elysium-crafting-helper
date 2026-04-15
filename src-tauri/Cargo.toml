@@ -1,8 +1,8 @@
 [package]
 name = "elysium-crafting-helper"
-version = "0.1.0"
-description = "A Tauri App"
-authors = ["you"]
+version = "0.0.0" # Overridden in ./build.rs
+description = "A minecraft crafting generator application "
+authors = [ "Brodino" ]
 edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
@@ -15,6 +15,7 @@ name = "elysium_crafting_helper_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
 [build-dependencies]
+serde_json = "1"
 tauri-build = { version = "2", features = [] }
 
 [dependencies]
