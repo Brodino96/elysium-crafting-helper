@@ -6,9 +6,10 @@ pub mod types;
 pub mod vanilla;
 
 use base64::Engine;
+use rayon::prelude::*;
 use std::collections::HashMap;
 use std::fs;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use model_resolver::MultiNamespaceModels;
 use types::*;
@@ -18,8 +19,11 @@ use types::*;
 /// Pipeline:
 /// 0. If vanilla_jar is provided, parse the Minecraft client JAR for vanilla items
 ///    (also extracts models + textures for cross-mod resolution)
-/// 1. Scan mods_dir for .jar files, parse each as a Fabric mod
-///    (shares the model/texture registry so mods can reference vanilla parents)
+/// 1a. Scan mods_dir for .jar files, parse each in **parallel** (rayon) —
+///     extracts metadata, lang, textures, models with NO shared state
+/// 1b. Merge all parsed data into the shared model/texture registries (sequential, fast)
+/// 1c. Resolve textures for all mods in **parallel** (rayon) —
+///     uses the now-complete shared registries as read-only references
 /// 2. If kubejs_dir is provided, parse startup scripts for registered items
 /// 3. Apply KubeJS texture and lang overrides on top of JAR data
 /// 4. Return merged LoadedMods (Minecraft group pinned first)
@@ -58,10 +62,7 @@ pub fn load_all(
                     shared_textures.insert(format!("minecraft:{}", path), bytes);
                 }
 
-                all_items
-                    .entry(mod_id)
-                    .or_insert_with(Vec::new)
-                    .extend(items);
+                all_items.entry(mod_id).or_default().extend(items);
             }
             Err(e) => {
                 warnings.push(format!("Vanilla Minecraft loading error: {}", e));
@@ -69,10 +70,14 @@ pub fn load_all(
         }
     }
 
-    // --- Phase 1: Load Fabric mod JARs ---
+    // --- Phase 1: Load Fabric mod JARs (parallel) ---
     if mods_dir.exists() && mods_dir.is_dir() {
-        let entries = match fs::read_dir(mods_dir) {
-            Ok(e) => e,
+        let jar_paths: Vec<PathBuf> = match fs::read_dir(mods_dir) {
+            Ok(entries) => entries
+                .filter_map(|e| e.ok())
+                .map(|e| e.path())
+                .filter(|p| p.is_file() && p.extension().and_then(|e| e.to_str()) == Some("jar"))
+                .collect(),
             Err(e) => {
                 warnings.push(format!("Failed to read mods directory: {}", e));
                 return LoadedMods {
@@ -84,25 +89,28 @@ pub fn load_all(
             }
         };
 
-        for entry in entries.filter_map(|e| e.ok()) {
-            let path = entry.path();
-            if !path.is_file() {
-                continue;
-            }
-            let ext = path.extension().and_then(|e| e.to_str()).unwrap_or("");
-            if ext != "jar" {
-                continue;
-            }
+        // Phase 1a: Parse all JARs in parallel (I/O-heavy, no shared state)
+        let parse_results: Vec<_> = jar_paths
+            .par_iter()
+            .map(|path| (path.clone(), fabric::parse_fabric_jar(path)))
+            .collect();
 
-            match fabric::load_fabric_jar(&path, &mut shared_models, &mut shared_textures) {
-                Ok((mod_info, items)) => {
-                    let mod_id = mod_info.id.clone();
-                    total_items += items.len();
-                    all_mods.push(mod_info);
-                    all_items
-                        .entry(mod_id)
-                        .or_insert_with(Vec::new)
-                        .extend(items);
+        // Phase 1b: Merge parsed data into shared registries (sequential, fast)
+        let mut parsed_jars: Vec<fabric::ParsedFabricJar> = Vec::new();
+
+        for (path, result) in parse_results {
+            match result {
+                Ok(parsed) => {
+                    // Add this mod's models to the shared registry
+                    shared_models.insert(parsed.mod_id.clone(), parsed.model_registry.clone());
+
+                    // Merge this mod's textures into shared textures with namespace prefix
+                    for (tex_path, bytes) in &parsed.textures {
+                        shared_textures
+                            .insert(format!("{}:{}", parsed.mod_id, tex_path), bytes.clone());
+                    }
+
+                    parsed_jars.push(parsed);
                 }
                 Err(e) => {
                     warnings.push(format!(
@@ -114,6 +122,22 @@ pub fn load_all(
                     ));
                 }
             }
+        }
+
+        // Phase 1c: Resolve textures for all mods in parallel (read-only shared state)
+        let resolved: Vec<(ModInfo, Vec<ItemInfo>)> = parsed_jars
+            .par_iter()
+            .map(|parsed| {
+                let items = fabric::resolve_fabric_items(parsed, &shared_models, &shared_textures);
+                (parsed.mod_info.clone(), items)
+            })
+            .collect();
+
+        for (mod_info, items) in resolved {
+            let mod_id = mod_info.id.clone();
+            total_items += items.len();
+            all_mods.push(mod_info);
+            all_items.entry(mod_id).or_default().extend(items);
         }
     }
 
@@ -138,7 +162,7 @@ pub fn load_all(
                         total_items += kjs_items.len();
                         all_items
                             .entry("kubejs".to_string())
-                            .or_insert_with(Vec::new)
+                            .or_default()
                             .extend(kjs_items);
                     }
 

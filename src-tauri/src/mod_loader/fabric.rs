@@ -9,20 +9,23 @@ use super::model_resolver::{self, ModelJson, ModelRegistry, MultiNamespaceModels
 use super::texture_renderer;
 use super::types::*;
 
-/// Load all items from a single Fabric mod JAR file.
+/// Intermediate data extracted from a single Fabric JAR (I/O phase only).
+/// This struct is produced by `parse_fabric_jar` which does all ZIP reading
+/// without needing any shared state, making it safe to run in parallel.
+pub struct ParsedFabricJar {
+    pub mod_info: ModInfo,
+    pub mod_id: String,
+    pub lang_map: HashMap<String, String>,
+    pub textures: HashMap<String, Vec<u8>>,
+    pub model_registry: ModelRegistry,
+}
+
+/// Phase 1a: Parse a Fabric JAR — extract metadata, lang, textures, and models.
 ///
-/// Parses fabric.mod.json for mod metadata, then extracts:
-/// - Item names from lang file (assets/<mod_id>/lang/en_us.json)
-/// - Item textures from assets/<mod_id>/textures/ (all subdirectories)
-/// - Item/block models from assets/<mod_id>/models/
-///
-/// `shared_models` is the accumulated multi-namespace model registry (includes vanilla models).
-/// This function adds the mod's own models to it and uses it for texture resolution.
-pub fn load_fabric_jar(
-    jar_path: &Path,
-    shared_models: &mut MultiNamespaceModels,
-    shared_textures: &mut HashMap<String, Vec<u8>>,
-) -> Result<(ModInfo, Vec<ItemInfo>), String> {
+/// This is the I/O-heavy phase that reads and decompresses the ZIP archive.
+/// It requires NO shared state and can be safely called from multiple threads
+/// in parallel via rayon.
+pub fn parse_fabric_jar(jar_path: &Path) -> Result<ParsedFabricJar, String> {
     let file = File::open(jar_path)
         .map_err(|e| format!("Failed to open {}: {}", jar_path.display(), e))?;
     let mut archive = ZipArchive::new(file)
@@ -48,19 +51,32 @@ pub fn load_fabric_jar(
     // 4. Collect all model JSONs from the JAR
     let model_registry = collect_models(&mut archive, &mod_id);
 
-    // Add this mod's models to the shared registry
-    shared_models.insert(mod_id.clone(), model_registry);
+    Ok(ParsedFabricJar {
+        mod_info,
+        mod_id,
+        lang_map,
+        textures,
+        model_registry,
+    })
+}
 
-    // Merge this mod's textures into shared textures with namespace prefix
-    // so cross-namespace references work (e.g. "modid:block/something")
-    for (path, bytes) in &textures {
-        shared_textures.insert(format!("{}:{}", mod_id, path), bytes.clone());
-    }
+/// Phase 1c: Resolve textures for a parsed Fabric mod's items using the
+/// fully-populated shared model/texture registries.
+///
+/// This only *reads* the shared registries (immutable references), so it can
+/// be safely called from multiple threads in parallel via rayon.
+pub fn resolve_fabric_items(
+    parsed: &ParsedFabricJar,
+    shared_models: &MultiNamespaceModels,
+    shared_textures: &HashMap<String, Vec<u8>>,
+) -> Vec<ItemInfo> {
+    let mod_id = &parsed.mod_id;
+    let lang_map = &parsed.lang_map;
+    let textures = &parsed.textures;
 
-    // 5. Build items list from lang entries + model-resolved textures
     let mut items = Vec::new();
 
-    for (lang_key, display_name) in &lang_map {
+    for (lang_key, display_name) in lang_map {
         let parts: Vec<&str> = lang_key.splitn(3, '.').collect();
         if parts.len() != 3 {
             continue;
@@ -69,7 +85,7 @@ pub fn load_fabric_jar(
         let namespace = parts[1];
         let name = parts[2];
 
-        if namespace != mod_id {
+        if namespace != mod_id.as_str() {
             continue;
         }
         if kind != "item" && kind != "block" {
@@ -77,26 +93,20 @@ pub fn load_fabric_jar(
         }
 
         // Try model-based resolution first
-        let texture_base64 = resolve_texture_for_item(
-            name,
-            kind,
-            shared_models,
-            &mod_id,
-            &textures,
-            shared_textures,
-        )
-        .or_else(|| {
-            // Fallback to direct texture lookup (original behavior)
-            let texture_key = if kind == "item" {
-                format!("item/{}", name)
-            } else {
-                format!("block/{}", name)
-            };
-            textures.get(&texture_key).map(|bytes| {
-                let encoded = base64::engine::general_purpose::STANDARD.encode(bytes);
-                format!("data:image/png;base64,{}", encoded)
-            })
-        });
+        let texture_base64 =
+            resolve_texture_for_item(name, kind, shared_models, mod_id, textures, shared_textures)
+                .or_else(|| {
+                    // Fallback to direct texture lookup (original behavior)
+                    let texture_key = if kind == "item" {
+                        format!("item/{}", name)
+                    } else {
+                        format!("block/{}", name)
+                    };
+                    textures.get(&texture_key).map(|bytes| {
+                        let encoded = base64::engine::general_purpose::STANDARD.encode(bytes);
+                        format!("data:image/png;base64,{}", encoded)
+                    })
+                });
 
         items.push(ItemInfo {
             id: format!("{}:{}", mod_id, name),
@@ -108,9 +118,9 @@ pub fn load_fabric_jar(
         });
     }
 
-    // 6. If no lang entries found, fall back to discovering items by texture files
+    // If no lang entries found, fall back to discovering items by texture files
     if items.is_empty() {
-        for (texture_path, bytes) in &textures {
+        for (texture_path, bytes) in textures {
             let parts: Vec<&str> = texture_path.splitn(2, '/').collect();
             if parts.len() != 2 {
                 continue;
@@ -152,7 +162,7 @@ pub fn load_fabric_jar(
         }
     }
 
-    Ok((mod_info, items))
+    items
 }
 
 /// Resolve a texture for an item using the model chain, then render it.
