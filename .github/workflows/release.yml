@@ -71,9 +71,6 @@ jobs:
           - os: macos-latest # arm64
             bundles: dmg,app
             artifact: macos-aarch64
-          - os: macos-13 # Intel
-            bundles: dmg,app
-            artifact: macos-x86_64
     runs-on: ${{ matrix.os }}
     steps:
       - name: Checkout
