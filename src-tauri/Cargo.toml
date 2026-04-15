@@ -1,9 +1,11 @@
 [package]
 name = "elysium-crafting-helper"
-version = "0.0.0" # Overridden in ./build.rs
-description = "A minecraft crafting generator application "
+version = "0.0.0" # Overridden in CI before cargo publish
+description = "A minecraft crafting generator application"
 authors = [ "Brodino" ]
 edition = "2021"
+license = "MIT"
+repository = "https://github.com/Brodino96/elysium-crafting-helper"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 

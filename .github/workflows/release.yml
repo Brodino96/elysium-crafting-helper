@@ -104,3 +104,24 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: gh release upload "v${{ needs.check-version.outputs.version }}" "${{ env.ARCHIVE_NAME }}" --repo "${{ github.repository }}" --clobber
+
+  publish-crate:
+    needs: [check-version, build-and-release]
+    if: needs.check-version.outputs.should_release == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6.0.2
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Sync version from package.json into Cargo.toml
+        run: |
+          VERSION=$(jq -r .version package.json)
+          sed -i "s/^version = \"0.0.0\"/version = \"$VERSION\"/" src-tauri/Cargo.toml
+
+      - name: Publish to crates.io
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+        run: cargo publish --allow-dirty
+        working-directory: src-tauri
