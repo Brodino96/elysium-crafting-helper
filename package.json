@@ -7,7 +7,8 @@
     "dev": "vite",
     "build": "tsc && vite build",
     "preview": "vite preview",
-    "tauri": "tauri"
+    "tauri": "tauri",
+    "prepare-release": "node scripts/prepare_release.js"
   },
   "dependencies": {
     "@tanstack/react-virtual": "^3.13.23",

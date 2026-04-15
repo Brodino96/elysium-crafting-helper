@@ -1,6 +1,6 @@
 [package]
 name = "elysium-crafting-helper"
-version = "0.0.0" # Overridden in CI before cargo publish
+version = "0.0.0"
 description = "A minecraft crafting generator application"
 authors = [ "Brodino" ]
 edition = "2021"
