@@ -82,8 +82,11 @@ function AppInner() {
       <Toolbar
         modpackDir={mods.modpackDir}
         loading={mods.loading}
+        fromMods={mods.fromMods}
+        hasCache={mods.hasCache}
         onSelectModpackDir={mods.selectModpackDir}
         onLoadMods={handleLoadMods}
+        onSetFromMods={mods.setFromMods}
       />
 
       <div className="app__content">

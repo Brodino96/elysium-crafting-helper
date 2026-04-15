@@ -13,6 +13,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             commands::set_modpack_dir,
             commands::load_mods,
+            commands::has_cache,
             commands::export_recipe,
             commands::get_loaded_mods,
             commands::save_file,

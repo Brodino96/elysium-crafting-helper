@@ -71,17 +71,78 @@ fn read_minecraft_version(modpack_dir: &PathBuf) -> Option<String> {
     instance.base_mod_loader?.minecraft_version
 }
 
-/// Load (or reload) all mods from the configured modpack directory.
-/// Looks for `<modpack_dir>/mods` and `<modpack_dir>/kubejs`.
-/// If a Minecraft version was detected, also loads vanilla items from the
-/// CurseForge install directory at `<modpack_dir>/../../Install/versions/<ver>/<ver>.jar`.
+/// Get the cache directory for a modpack.
+/// Returns `<OS temp dir>/elysium-crafting-helper/<modpack_folder_name>/`.
+fn get_cache_dir(modpack_path: &std::path::Path) -> PathBuf {
+    let folder_name = modpack_path
+        .file_name()
+        .and_then(|n| n.to_str())
+        .unwrap_or("unknown");
+
+    std::env::temp_dir()
+        .join("elysium-crafting-helper")
+        .join(folder_name)
+}
+
+/// Try to load cached mod data from disk.
+fn load_from_cache(cache_dir: &std::path::Path) -> Option<LoadedMods> {
+    let cache_file = cache_dir.join("cache.json");
+    let contents = std::fs::read_to_string(&cache_file).ok()?;
+    serde_json::from_str(&contents).ok()
+}
+
+/// Save mod data to the cache directory on disk.
+fn save_to_cache(cache_dir: &std::path::Path, data: &LoadedMods) -> Result<(), String> {
+    std::fs::create_dir_all(cache_dir)
+        .map_err(|e| format!("Failed to create cache directory: {}", e))?;
+
+    let cache_file = cache_dir.join("cache.json");
+    let json =
+        serde_json::to_string(data).map_err(|e| format!("Failed to serialize cache: {}", e))?;
+
+    std::fs::write(&cache_file, json).map_err(|e| format!("Failed to write cache file: {}", e))?;
+
+    Ok(())
+}
+
+/// Check whether a cache exists for the current modpack.
 #[tauri::command]
-pub fn load_mods(state: State<'_, AppState>) -> Result<LoadedMods, String> {
+pub fn has_cache(state: State<'_, AppState>) -> Result<bool, String> {
     let modpack_dir = state.modpack_dir.lock().unwrap();
     let modpack_path = modpack_dir
         .as_ref()
         .ok_or("No modpack directory selected")?;
 
+    let cache_dir = get_cache_dir(modpack_path);
+    Ok(cache_dir.join("cache.json").exists())
+}
+
+/// Load (or reload) all mods from the configured modpack directory.
+///
+/// When `from_mods` is `false`, tries to load from the disk cache first.
+/// When `from_mods` is `true`, always re-parses all JARs and regenerates the cache.
+///
+/// Looks for `<modpack_dir>/mods` and `<modpack_dir>/kubejs`.
+/// If a Minecraft version was detected, also loads vanilla items from the
+/// CurseForge install directory at `<modpack_dir>/../../Install/versions/<ver>/<ver>.jar`.
+#[tauri::command]
+pub fn load_mods(from_mods: bool, state: State<'_, AppState>) -> Result<LoadedMods, String> {
+    let modpack_dir = state.modpack_dir.lock().unwrap();
+    let modpack_path = modpack_dir
+        .as_ref()
+        .ok_or("No modpack directory selected")?;
+
+    let cache_dir = get_cache_dir(modpack_path);
+
+    // Try loading from cache if not forcing a reload
+    if !from_mods {
+        if let Some(cached) = load_from_cache(&cache_dir) {
+            *state.loaded_mods.lock().unwrap() = Some(cached.clone());
+            return Ok(cached);
+        }
+    }
+
+    // Full reload from mod JARs
     let mods_path = modpack_path.join("mods");
     let kubejs_path = modpack_path.join("kubejs");
     let kubejs_opt = if kubejs_path.is_dir() {
@@ -129,7 +190,12 @@ pub fn load_mods(state: State<'_, AppState>) -> Result<LoadedMods, String> {
     let mut loaded = mod_loader::load_all(&mods_path, kubejs_opt, vanilla_arg);
     loaded.warnings.extend(warnings_extra);
 
-    // Cache the loaded data
+    // Save to disk cache (non-fatal if it fails)
+    if let Err(e) = save_to_cache(&cache_dir, &loaded) {
+        loaded.warnings.push(format!("Cache write warning: {}", e));
+    }
+
+    // Cache in memory
     *state.loaded_mods.lock().unwrap() = Some(loaded.clone());
 
     Ok(loaded)

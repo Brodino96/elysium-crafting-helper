@@ -133,6 +133,10 @@ img {
   flex-wrap: wrap;
 }
 
+.toolbar__from-mods {
+  margin-left: 4px;
+}
+
 /* --- Minecraft-style Buttons --- */
 
 .mc-btn {
