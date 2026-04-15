@@ -1,6 +1,7 @@
 pub mod fabric;
 pub mod kubejs;
 pub mod types;
+pub mod vanilla;
 
 use base64::Engine;
 use std::collections::HashMap;
@@ -12,15 +13,40 @@ use types::*;
 /// Load all mods from a mods directory and optionally merge with KubeJS data.
 ///
 /// Pipeline:
+/// 0. If vanilla_jar is provided, parse the Minecraft client JAR for vanilla items
 /// 1. Scan mods_dir for .jar files, parse each as a Fabric mod
 /// 2. If kubejs_dir is provided, parse startup scripts for registered items
 /// 3. Apply KubeJS texture and lang overrides on top of JAR data
-/// 4. Return merged LoadedMods
-pub fn load_all(mods_dir: &Path, kubejs_dir: Option<&Path>) -> LoadedMods {
+/// 4. Return merged LoadedMods (Minecraft group pinned first)
+///
+/// `vanilla_jar` is `Some((jar_path, mc_version_string))`.
+pub fn load_all(
+    mods_dir: &Path,
+    kubejs_dir: Option<&Path>,
+    vanilla_jar: Option<(&Path, &str)>,
+) -> LoadedMods {
     let mut all_mods: Vec<ModInfo> = Vec::new();
     let mut all_items: HashMap<String, Vec<ItemInfo>> = HashMap::new();
     let mut warnings: Vec<String> = Vec::new();
     let mut total_items: usize = 0;
+
+    // --- Phase 0: Load vanilla Minecraft items ---
+    if let Some((jar_path, mc_version)) = vanilla_jar {
+        match vanilla::load_vanilla_jar(jar_path, mc_version) {
+            Ok((mod_info, items)) => {
+                let mod_id = mod_info.id.clone();
+                total_items += items.len();
+                all_mods.push(mod_info);
+                all_items
+                    .entry(mod_id)
+                    .or_insert_with(Vec::new)
+                    .extend(items);
+            }
+            Err(e) => {
+                warnings.push(format!("Vanilla Minecraft loading error: {}", e));
+            }
+        }
+    }
 
     // --- Phase 1: Load Fabric mod JARs ---
     if mods_dir.exists() && mods_dir.is_dir() {
@@ -138,8 +164,12 @@ pub fn load_all(mods_dir: &Path, kubejs_dir: Option<&Path>) -> LoadedMods {
         }
     }
 
-    // Sort mods alphabetically
-    all_mods.sort_by(|a, b| a.name.to_lowercase().cmp(&b.name.to_lowercase()));
+    // Sort mods alphabetically, but always pin "minecraft" first
+    all_mods.sort_by(|a, b| match (a.id.as_str(), b.id.as_str()) {
+        ("minecraft", _) => std::cmp::Ordering::Less,
+        (_, "minecraft") => std::cmp::Ordering::Greater,
+        _ => a.name.to_lowercase().cmp(&b.name.to_lowercase()),
+    });
 
     // Sort items within each mod alphabetically
     for items in all_items.values_mut() {

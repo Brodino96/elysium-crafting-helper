@@ -1,5 +1,5 @@
 /** Mirrors the Rust ModSource enum */
-export type ModSource = "fabric_jar" | "kube_js";
+export type ModSource = "fabric_jar" | "kube_js" | "vanilla_jar";
 
 /** Metadata about a single mod */
 export interface ModInfo {

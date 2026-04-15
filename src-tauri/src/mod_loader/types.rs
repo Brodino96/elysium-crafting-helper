@@ -21,6 +21,8 @@ pub enum ModSource {
     FabricJar,
     /// Registered via KubeJS startup scripts
     KubeJs,
+    /// Loaded from the vanilla Minecraft client JAR
+    VanillaJar,
 }
 
 /// A single game item with its metadata and texture
