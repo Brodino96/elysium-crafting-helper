@@ -88,7 +88,8 @@ jobs:
         run: |
           ARCHIVE_NAME="elysium-crafting-helper-${{ matrix.rust-target }}.tar.gz"
           cp "src-tauri/target/release/${{ matrix.binary-name }}" "${{ matrix.binary-name }}"
-          tar czf "$ARCHIVE_NAME" "${{ matrix.binary-name }}"
+          cp "src-tauri/icons/128x128.png" "elysium-crafting-helper.png"
+          tar czf "$ARCHIVE_NAME" "${{ matrix.binary-name }}" "elysium-crafting-helper.png"
           echo "ARCHIVE_NAME=$ARCHIVE_NAME" >> "$GITHUB_ENV"
 
       - name: Package binary for cargo-binstall (Windows)
@@ -125,3 +126,40 @@ jobs:
           CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
         run: cargo publish --allow-dirty
         working-directory: src-tauri
+
+  publish-aur:
+    needs: [check-version, build-and-release]
+    if: needs.check-version.outputs.should_release == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Generate PKGBUILD
+        env:
+          VERSION: ${{ needs.check-version.outputs.version }}
+        run: |
+          ARCHIVE_URL="https://github.com/${{ github.repository }}/releases/download/v${VERSION}/elysium-crafting-helper-x86_64-unknown-linux-gnu.tar.gz"
+          SHA256=$(curl -sL "$ARCHIVE_URL" | sha256sum | cut -d' ' -f1)
+          sed -e "s/{{VERSION}}/${VERSION}/g" -e "s/{{SHA256}}/${SHA256}/g" .github/aur/PKGBUILD.template > PKGBUILD
+
+      - name: Publish to AUR
+        uses: KSXGitHub/github-actions-deploy-aur@v3
+        with:
+          pkgname: elysium-crafting-helper-bin
+          pkgbuild: ./PKGBUILD
+          commit_username: Brodino96
+          commit_email: ${{ secrets.AUR_EMAIL }}
+          ssh_private_key: ${{ secrets.AUR_SSH_PRIVATE_KEY }}
+
+  publish-winget:
+    needs: [check-version, build-and-release]
+    if: needs.check-version.outputs.should_release == 'true'
+    runs-on: windows-latest
+    steps:
+      - name: Publish to winget
+        uses: vedantmgoyal9/winget-releaser@v2
+        with:
+          identifier: Brodino.ElysiumCraftingHelper
+          version: ${{ needs.check-version.outputs.version }}
+          installers-regex: 'x64-setup\.exe$'
+          token: ${{ secrets.WINGET_TOKEN }}
