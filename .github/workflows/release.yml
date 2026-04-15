@@ -64,30 +64,6 @@ jobs:
       - name: Install frontend dependencies
         run: bun install
 
-      - name: Sync version from package.json
-        shell: bash
-        env:
-          VERSION: ${{ needs.check-version.outputs.version }}
-        run: |
-          node -e "
-            const fs = require('fs');
-            const version = process.env.VERSION;
-
-            // Update tauri.conf.json
-            const confPath = 'src-tauri/tauri.conf.json';
-            const conf = JSON.parse(fs.readFileSync(confPath, 'utf8'));
-            conf.version = version;
-            fs.writeFileSync(confPath, JSON.stringify(conf, null, 2) + '\n');
-            console.log('Updated tauri.conf.json to version ' + version);
-
-            // Update Cargo.toml (replace the package version, first occurrence of ^version = ...)
-            const cargoPath = 'src-tauri/Cargo.toml';
-            let cargo = fs.readFileSync(cargoPath, 'utf8');
-            cargo = cargo.replace(/^version = \".*\"/m, 'version = \"' + version + '\"');
-            fs.writeFileSync(cargoPath, cargo);
-            console.log('Updated Cargo.toml to version ' + version);
-          "
-
       - name: Build and upload to release
         uses: tauri-apps/tauri-action@v0
         env:
