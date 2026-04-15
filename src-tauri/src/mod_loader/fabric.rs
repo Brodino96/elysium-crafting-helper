@@ -5,15 +5,24 @@ use std::io::Read;
 use std::path::Path;
 use zip::ZipArchive;
 
+use super::model_resolver::{self, ModelJson, ModelRegistry, MultiNamespaceModels};
+use super::texture_renderer;
 use super::types::*;
 
 /// Load all items from a single Fabric mod JAR file.
 ///
 /// Parses fabric.mod.json for mod metadata, then extracts:
 /// - Item names from lang file (assets/<mod_id>/lang/en_us.json)
-/// - Item textures from assets/<mod_id>/textures/item/*.png
-/// - Block textures from assets/<mod_id>/textures/block/*.png
-pub fn load_fabric_jar(jar_path: &Path) -> Result<(ModInfo, Vec<ItemInfo>), String> {
+/// - Item textures from assets/<mod_id>/textures/ (all subdirectories)
+/// - Item/block models from assets/<mod_id>/models/
+///
+/// `shared_models` is the accumulated multi-namespace model registry (includes vanilla models).
+/// This function adds the mod's own models to it and uses it for texture resolution.
+pub fn load_fabric_jar(
+    jar_path: &Path,
+    shared_models: &mut MultiNamespaceModels,
+    shared_textures: &mut HashMap<String, Vec<u8>>,
+) -> Result<(ModInfo, Vec<ItemInfo>), String> {
     let file = File::open(jar_path)
         .map_err(|e| format!("Failed to open {}: {}", jar_path.display(), e))?;
     let mut archive = ZipArchive::new(file)
@@ -33,15 +42,25 @@ pub fn load_fabric_jar(jar_path: &Path) -> Result<(ModInfo, Vec<ItemInfo>), Stri
     // 2. Load lang file for display names
     let lang_map = read_lang_file(&mut archive, &mod_id);
 
-    // 3. Collect all textures available in the JAR
-    let textures = collect_textures(&mut archive, &mod_id);
+    // 3. Collect all textures available in the JAR (including subdirectories)
+    let textures = collect_all_textures(&mut archive, &mod_id);
 
-    // 4. Build items list from lang entries + available textures
+    // 4. Collect all model JSONs from the JAR
+    let model_registry = collect_models(&mut archive, &mod_id);
+
+    // Add this mod's models to the shared registry
+    shared_models.insert(mod_id.clone(), model_registry);
+
+    // Merge this mod's textures into shared textures with namespace prefix
+    // so cross-namespace references work (e.g. "modid:block/something")
+    for (path, bytes) in &textures {
+        shared_textures.insert(format!("{}:{}", mod_id, path), bytes.clone());
+    }
+
+    // 5. Build items list from lang entries + model-resolved textures
     let mut items = Vec::new();
 
-    // Items from lang file entries
     for (lang_key, display_name) in &lang_map {
-        // Match patterns like "item.<mod_id>.<name>" and "block.<mod_id>.<name>"
         let parts: Vec<&str> = lang_key.splitn(3, '.').collect();
         if parts.len() != 3 {
             continue;
@@ -57,15 +76,26 @@ pub fn load_fabric_jar(jar_path: &Path) -> Result<(ModInfo, Vec<ItemInfo>), Stri
             continue;
         }
 
-        let texture_key = if kind == "item" {
-            format!("item/{}", name)
-        } else {
-            format!("block/{}", name)
-        };
-
-        let texture_base64 = textures.get(&texture_key).map(|bytes| {
-            let encoded = base64::engine::general_purpose::STANDARD.encode(bytes);
-            format!("data:image/png;base64,{}", encoded)
+        // Try model-based resolution first
+        let texture_base64 = resolve_texture_for_item(
+            name,
+            kind,
+            shared_models,
+            &mod_id,
+            &textures,
+            shared_textures,
+        )
+        .or_else(|| {
+            // Fallback to direct texture lookup (original behavior)
+            let texture_key = if kind == "item" {
+                format!("item/{}", name)
+            } else {
+                format!("block/{}", name)
+            };
+            textures.get(&texture_key).map(|bytes| {
+                let encoded = base64::engine::general_purpose::STANDARD.encode(bytes);
+                format!("data:image/png;base64,{}", encoded)
+            })
         });
 
         items.push(ItemInfo {
@@ -78,15 +108,22 @@ pub fn load_fabric_jar(jar_path: &Path) -> Result<(ModInfo, Vec<ItemInfo>), Stri
         });
     }
 
-    // 5. If no lang entries found, fall back to discovering items by texture files
+    // 6. If no lang entries found, fall back to discovering items by texture files
     if items.is_empty() {
         for (texture_path, bytes) in &textures {
-            // texture_path is like "item/ruby" or "block/copper_ore"
             let parts: Vec<&str> = texture_path.splitn(2, '/').collect();
             if parts.len() != 2 {
                 continue;
             }
+            let prefix = parts[0];
             let name = parts[1];
+            if prefix != "item" && prefix != "block" {
+                continue;
+            }
+            // Skip subdirectory textures for fallback discovery
+            if name.contains('/') {
+                continue;
+            }
 
             let encoded = base64::engine::general_purpose::STANDARD.encode(bytes);
             let texture_base64 = Some(format!("data:image/png;base64,{}", encoded));
@@ -116,6 +153,26 @@ pub fn load_fabric_jar(jar_path: &Path) -> Result<(ModInfo, Vec<ItemInfo>), Stri
     }
 
     Ok((mod_info, items))
+}
+
+/// Resolve a texture for an item using the model chain, then render it.
+/// Returns a data URI string if successful.
+/// `local_textures` are this mod's textures, `shared_textures` includes all namespaces.
+fn resolve_texture_for_item(
+    item_name: &str,
+    kind: &str,
+    all_models: &MultiNamespaceModels,
+    namespace: &str,
+    local_textures: &HashMap<String, Vec<u8>>,
+    shared_textures: &HashMap<String, Vec<u8>>,
+) -> Option<String> {
+    let resolved = model_resolver::resolve_item_texture(item_name, kind, all_models, namespace)?;
+
+    // Try local textures first, then fall back to shared (cross-namespace) textures
+    let png_bytes = texture_renderer::render_texture(&resolved, local_textures, namespace)
+        .or_else(|| texture_renderer::render_texture(&resolved, shared_textures, namespace))?;
+    let encoded = base64::engine::general_purpose::STANDARD.encode(&png_bytes);
+    Some(format!("data:image/png;base64,{}", encoded))
 }
 
 /// Read and parse fabric.mod.json from a JAR archive
@@ -149,15 +206,12 @@ fn read_lang_file(archive: &mut ZipArchive<File>, mod_id: &str) -> HashMap<Strin
     serde_json::from_str(&contents).unwrap_or_default()
 }
 
-/// Collect all PNG textures from a JAR's assets/<mod_id>/textures/ directory.
-/// Returns a map of relative paths (e.g. "item/ruby") to raw PNG bytes.
-fn collect_textures(archive: &mut ZipArchive<File>, mod_id: &str) -> HashMap<String, Vec<u8>> {
-    let item_prefix = format!("assets/{}/textures/item/", mod_id);
-    let block_prefix = format!("assets/{}/textures/block/", mod_id);
-
+/// Collect ALL PNG textures from a JAR's assets/<mod_id>/textures/ directory,
+/// including subdirectories. Returns a map of relative paths to raw PNG bytes.
+fn collect_all_textures(archive: &mut ZipArchive<File>, mod_id: &str) -> HashMap<String, Vec<u8>> {
+    let textures_prefix = format!("assets/{}/textures/", mod_id);
     let mut textures = HashMap::new();
 
-    // We need to collect file names first since we can't borrow archive mutably twice
     let file_names: Vec<String> = (0..archive.len())
         .filter_map(|i| archive.by_index(i).ok().map(|f| f.name().to_string()))
         .collect();
@@ -167,21 +221,9 @@ fn collect_textures(archive: &mut ZipArchive<File>, mod_id: &str) -> HashMap<Str
             continue;
         }
 
-        let relative_path = if let Some(rest) = file_name.strip_prefix(&item_prefix) {
-            Some(format!(
-                "item/{}",
-                rest.strip_suffix(".png").unwrap_or(rest)
-            ))
-        } else if let Some(rest) = file_name.strip_prefix(&block_prefix) {
-            Some(format!(
-                "block/{}",
-                rest.strip_suffix(".png").unwrap_or(rest)
-            ))
-        } else {
-            None
-        };
+        if let Some(rest) = file_name.strip_prefix(&textures_prefix) {
+            let rel_path = rest.strip_suffix(".png").unwrap_or(rest).to_string();
 
-        if let Some(rel_path) = relative_path {
             if let Ok(mut entry) = archive.by_name(file_name) {
                 let mut bytes = Vec::new();
                 if entry.read_to_end(&mut bytes).is_ok() {
@@ -192,4 +234,35 @@ fn collect_textures(archive: &mut ZipArchive<File>, mod_id: &str) -> HashMap<Str
     }
 
     textures
+}
+
+/// Collect all model JSONs from a JAR's assets/<mod_id>/models/ directory.
+fn collect_models(archive: &mut ZipArchive<File>, mod_id: &str) -> ModelRegistry {
+    let models_prefix = format!("assets/{}/models/", mod_id);
+    let mut models = ModelRegistry::new();
+
+    let file_names: Vec<String> = (0..archive.len())
+        .filter_map(|i| archive.by_index(i).ok().map(|f| f.name().to_string()))
+        .collect();
+
+    for file_name in &file_names {
+        if !file_name.ends_with(".json") {
+            continue;
+        }
+
+        if let Some(rest) = file_name.strip_prefix(&models_prefix) {
+            let model_path = rest.strip_suffix(".json").unwrap_or(rest).to_string();
+
+            if let Ok(mut entry) = archive.by_name(file_name) {
+                let mut contents = String::new();
+                if entry.read_to_string(&mut contents).is_ok() {
+                    if let Ok(model) = serde_json::from_str::<ModelJson>(&contents) {
+                        models.insert(model_path, model);
+                    }
+                }
+            }
+        }
+    }
+
+    models
 }

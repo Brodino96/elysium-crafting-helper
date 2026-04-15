@@ -28,4 +28,5 @@ base64 = "0.22.1"
 tauri-plugin-dialog = "2.7.0"
 regex = "1.12.3"
 walkdir = "2.5.0"
+image = "0.25"
 

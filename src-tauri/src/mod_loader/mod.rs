@@ -1,5 +1,7 @@
 pub mod fabric;
 pub mod kubejs;
+pub mod model_resolver;
+pub mod texture_renderer;
 pub mod types;
 pub mod vanilla;
 
@@ -8,13 +10,16 @@ use std::collections::HashMap;
 use std::fs;
 use std::path::Path;
 
+use model_resolver::MultiNamespaceModels;
 use types::*;
 
 /// Load all mods from a mods directory and optionally merge with KubeJS data.
 ///
 /// Pipeline:
 /// 0. If vanilla_jar is provided, parse the Minecraft client JAR for vanilla items
+///    (also extracts models + textures for cross-mod resolution)
 /// 1. Scan mods_dir for .jar files, parse each as a Fabric mod
+///    (shares the model/texture registry so mods can reference vanilla parents)
 /// 2. If kubejs_dir is provided, parse startup scripts for registered items
 /// 3. Apply KubeJS texture and lang overrides on top of JAR data
 /// 4. Return merged LoadedMods (Minecraft group pinned first)
@@ -30,13 +35,29 @@ pub fn load_all(
     let mut warnings: Vec<String> = Vec::new();
     let mut total_items: usize = 0;
 
+    // Shared model and texture registries across all namespaces.
+    // Vanilla models are loaded first so fabric mods can reference them as parents.
+    let mut shared_models = MultiNamespaceModels::new();
+    let mut shared_textures: HashMap<String, Vec<u8>> = HashMap::new();
+
     // --- Phase 0: Load vanilla Minecraft items ---
     if let Some((jar_path, mc_version)) = vanilla_jar {
         match vanilla::load_vanilla_jar(jar_path, mc_version) {
-            Ok((mod_info, items)) => {
+            Ok((mod_info, items, vanilla_models, vanilla_textures)) => {
                 let mod_id = mod_info.id.clone();
                 total_items += items.len();
                 all_mods.push(mod_info);
+
+                // Merge vanilla models into the shared registry
+                for (ns, registry) in vanilla_models {
+                    shared_models.entry(ns).or_default().extend(registry);
+                }
+
+                // Merge vanilla textures into shared textures with namespace prefix
+                for (path, bytes) in vanilla_textures {
+                    shared_textures.insert(format!("minecraft:{}", path), bytes);
+                }
+
                 all_items
                     .entry(mod_id)
                     .or_insert_with(Vec::new)
@@ -73,7 +94,7 @@ pub fn load_all(
                 continue;
             }
 
-            match fabric::load_fabric_jar(&path) {
+            match fabric::load_fabric_jar(&path, &mut shared_models, &mut shared_textures) {
                 Ok((mod_info, items)) => {
                     let mod_id = mod_info.id.clone();
                     total_items += items.len();
