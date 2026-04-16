@@ -1,7 +1,13 @@
-# Tauri + React + Typescript
+# Elysium Crafting Helper
 
-This template should help get you started developing with Tauri, React and Typescript in Vite.
+A blazingly fast tool for creating custom Minecraft recipes. 
 
-## Recommended IDE Setup
+# Features
+- **Modpack loading**: Select a CurseForge's modpack directory to load all items from mods and Minecraft version
+- **Crafting types**:
+    - minecraft:crafting_shaped
+    - minecraft:crafting_shapeless
 
-- [VS Code](https://code.visualstudio.com/) + [Tauri](https://marketplace.visualstudio.com/items?itemName=tauri-apps.tauri-vscode) + [rust-analyzer](https://marketplace.visualstudio.com/items?itemName=rust-lang.rust-analyzer)
+# Disclaimer
+This tool is specifically made and supported for the development of [ElysiumCraftRP](https://www.curseforge.com/minecraft/modpacks/elysiumcraftrp), it only (officially) supports CurseForge's modpacks on Minecraft 1.19.2 and using Fabric as a mod loader.  
+This tool is 80% AI generated
