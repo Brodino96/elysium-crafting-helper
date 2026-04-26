@@ -6,14 +6,24 @@ pkgdesc="A blazingly fast tool for creating custom Minecraft recipes."
 arch=('x86_64')
 url="https://github.com/Brodino96/elysium-crafting-helper"
 license=('MIT')
-depends=()
+depends=(
+    'cairo'
+    'desktop-file-utils'
+    'gdk-pixbuf2'
+    'glib2'
+    'gtk3'
+    'hicolor-icon-theme'
+    'libsoup'
+    'pango'
+    'webkit2gtk-4.1'
+)
 makedepends=(
     'git'
-    'webkit2gtk-4.1'
     'libappindicator'
     'librsvg'
     'patchelf'
     'bun'
+    'cargo'
 )
 provides=('elysium-crafting-helper')
 source=("git+${url}.git")
