@@ -1,0 +1,10 @@
+services:
+  archlinux:
+    image: archlinux:latest
+    container_name: elysium-pkgbuild-test
+    volumes:
+      - ./aur:/home/builder/aur
+    working_dir: /home/builder
+    stdin_open: true
+    tty: true
+    command: bash /home/builder/aur/test-install.sh
