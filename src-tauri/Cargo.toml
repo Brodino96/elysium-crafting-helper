@@ -1,6 +1,6 @@
 [package]
 name = "elysium-crafting-helper"
-version = "1.0.2"
+version = "1.1.0"
 description = "A minecraft crafting generator application"
 authors = [ "Brodino" ]
 edition = "2021"
