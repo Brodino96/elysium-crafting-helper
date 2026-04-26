@@ -1,6 +1,6 @@
 # Maintainer: Brodino <brodino96@gmail.com>
 pkgname=elysium-crafting-helper-git
-pkgver=1.1.1
+pkgver=1.1.2
 pkgrel=1
 pkgdesc="A blazingly fast tool for creating custom Minecraft recipes."
 arch=('x86_64')
