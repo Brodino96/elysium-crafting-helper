@@ -1,0 +1,44 @@
+# Maintainer: Brodino <brodino96@gmail.com>
+pkgname=elysium-crafting-helper
+pkgver=1.1.1
+pkgrel=1
+pkgdesc="A blazingly fast tool for creating custom Minecraft recipes."
+arch=('x86_64')
+url="https://github.com/Brodino96/elysium-crafting-helper"
+license=('MIT')
+depends=()
+makedepends=(
+    'git'
+    'webkit2gtk-4.1'
+    'libappindicator'
+    'librsvg'
+    'patchelf'
+    'bun'
+)
+provides=('elysium-crafting-helper')
+source=("git+${url}.git")
+sha256sums=("SKIP")
+
+prepare() {
+    cd "elysium-crafting-helper"
+    bun install
+}
+
+build() {
+    cd "elysium-crafting-helper"
+
+    # Disable LTO in GGML/whisper.cpp build
+    export GGML_LTO=OFF
+
+    # Remove -flto=auto from Arch's default flags - LTO objects can't be linked by rust-lld
+    export CFLAGS="${CFLAGS//-flto=auto/}"
+    export CXXFLAGS="${CXXFLAGS//-flto=auto/}"
+    export LDFLAGS="${LDFLAGS//-flto=auto/}"
+
+    bun run tauri build -b deb
+}
+
+package() {
+    cd "elysium-crafting-helper"
+    cp -a src-tauri/target/release/bundle/deb/elysium-crafting-helper_${pkgver}_*/data/* "${pkgdir}"
+}
