@@ -218,22 +218,3 @@ jobs:
             echo "Uploading portable: $portable_name"
             gh release upload "v${VERSION}" "$(dirname "$file")/$portable_name" --repo "${{ github.repository }}"
           done
-
-  publish-aur:
-    needs: [prepare, release]
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v6.0.2
-        with:
-          ref: v${{ needs.prepare.outputs.version }}
-
-      - name: Publish to AUR
-        uses: KSXGitHub/github-actions-deploy-aur@v4.1.3
-        with:
-          pkgname: elysium-crafting-helper-git
-          pkgbuild: aur/PKGBUILD
-          commit_username: ${{ secrets.AUR_USERNAME }}
-          commit_email: ${{ secrets.AUR_EMAIL }}
-          ssh_private_key: ${{ secrets.AUR_SSH_PRIVATE_KEY }}
-          commit_message: "chore: update to v${{ needs.prepare.outputs.version }}"
