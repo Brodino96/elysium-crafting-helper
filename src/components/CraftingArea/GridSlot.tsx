@@ -1,5 +1,6 @@
 import { memo, useState, useCallback } from "react";
 import type { GridSlotState } from "../../types/recipe";
+import { isPlaceholder } from "../../types/recipe";
 import type { SlotDefinition } from "./grids/types";
 import { useDragContext } from "../../hooks/useDragContext";
 
@@ -16,6 +17,11 @@ interface GridSlotProps {
  *   - onPointerUp: if an item is being dragged, place it in this slot
  *   - onPointerEnter/Leave: highlight when an item is dragged over
  * Right-click (contextmenu) to clear.
+ *
+ * Renders three states for a filled slot:
+ *   1. Full ItemInfo with texture → shows the texture image
+ *   2. Full ItemInfo without texture → shows the purple/black checkerboard
+ *   3. PlaceholderItem → shows a grey slot with the item ID as text
  */
 export const GridSlot = memo(function GridSlot({
   definition,
@@ -59,28 +65,31 @@ export const GridSlot = memo(function GridSlot({
   );
 
   const isOutput = definition.type === "output";
+  const item = state.item;
+  const placeholder = item && isPlaceholder(item) ? item : null;
+  const fullItem = item && !isPlaceholder(item) ? item : null;
+
+  const titleText = item
+    ? `${item.display_name}\n${item.id}\nRight-click to remove`
+    : isOutput
+      ? "Output slot"
+      : "Drop item here";
 
   return (
     <div
-      className={`grid-slot ${isOutput ? "grid-slot--output" : "grid-slot--input"} ${isOver ? "grid-slot--over" : ""} ${state.item ? "grid-slot--filled" : ""}`}
+      className={`grid-slot ${isOutput ? "grid-slot--output" : "grid-slot--input"} ${isOver ? "grid-slot--over" : ""} ${item ? "grid-slot--filled" : ""}`}
       onPointerUp={handlePointerUp}
       onPointerEnter={handlePointerEnter}
       onPointerLeave={handlePointerLeave}
       onContextMenu={handleContextMenu}
-      title={
-        state.item
-          ? `${state.item.display_name}\n${state.item.id}\nRight-click to remove`
-          : isOutput
-            ? "Output slot"
-            : "Drop item here"
-      }
+      title={titleText}
     >
-      {state.item ? (
+      {fullItem && (
         <div className="grid-slot__item">
-          {state.item.texture_base64 ? (
+          {fullItem.texture_base64 ? (
             <img
-              src={state.item.texture_base64}
-              alt={state.item.display_name}
+              src={fullItem.texture_base64}
+              alt={fullItem.display_name}
               className="grid-slot__texture"
               draggable={false}
             />
@@ -88,10 +97,22 @@ export const GridSlot = memo(function GridSlot({
             <div className="grid-slot__placeholder-texture" />
           )}
         </div>
-      ) : null}
+      )}
+
+      {placeholder && (
+        <div className="grid-slot__unknown-item" title={placeholder.id}>
+          <span className="grid-slot__unknown-id">
+            {placeholder.id.includes(":")
+              ? placeholder.id.split(":")[1]
+              : placeholder.id}
+          </span>
+        </div>
+      )}
+
       {definition.label && (
         <span className="grid-slot__label">{definition.label}</span>
       )}
     </div>
   );
 });
+

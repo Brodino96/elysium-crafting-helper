@@ -1,6 +1,12 @@
 import { useState, useCallback } from "react";
 import type { ItemInfo } from "../types/item";
-import type { GridSlotState, ExportRecipeRequest } from "../types/recipe";
+import type { LoadedMods } from "../types/item";
+import type {
+  GridSlotState,
+  ExportRecipeRequest,
+  PlaceholderItem,
+  RecipeFileEntry,
+} from "../types/recipe";
 import type { CraftingGridConfig } from "../components/CraftingArea/grids/types";
 
 /**
@@ -22,13 +28,16 @@ export function useCraftingGrid(config: CraftingGridConfig) {
   const [outputCount, setOutputCount] = useState(1);
 
   /** Place an item in a slot */
-  const setSlot = useCallback((slotId: string, item: ItemInfo | null) => {
-    setSlotStates((prev) => {
-      const next = new Map(prev);
-      next.set(slotId, { slotId, item });
-      return next;
-    });
-  }, []);
+  const setSlot = useCallback(
+    (slotId: string, item: ItemInfo | PlaceholderItem | null) => {
+      setSlotStates((prev) => {
+        const next = new Map(prev);
+        next.set(slotId, { slotId, item });
+        return next;
+      });
+    },
+    [],
+  );
 
   /** Clear a specific slot */
   const clearSlot = useCallback((slotId: string) => {
@@ -51,17 +60,76 @@ export function useCraftingGrid(config: CraftingGridConfig) {
   }, []);
 
   /** Reset slots when grid config changes */
-  const resetForConfig = useCallback(
-    (newConfig: CraftingGridConfig) => {
-      const initial = new Map<string, GridSlotState>();
-      for (const slot of newConfig.slots) {
-        initial.set(slot.id, { slotId: slot.id, item: null });
+  const resetForConfig = useCallback((newConfig: CraftingGridConfig) => {
+    const initial = new Map<string, GridSlotState>();
+    for (const slot of newConfig.slots) {
+      initial.set(slot.id, { slotId: slot.id, item: null });
+    }
+    setSlotStates(initial);
+    setShapeless(false);
+    setOutputCount(1);
+  }, []);
+
+  /**
+   * Populate the grid from a recipe file entry.
+   * Items that exist in loadedMods are resolved to their full ItemInfo;
+   * unknown items become PlaceholderItems so the slot still renders something.
+   *
+   * `loadedMods` may be null (mods not loaded yet) — in that case every item
+   * becomes a placeholder.
+   */
+  const loadRecipe = useCallback(
+    (entry: RecipeFileEntry, loadedMods: LoadedMods | null) => {
+      const { recipe } = entry;
+
+      // Build a flat lookup: item_id → ItemInfo
+      const itemLookup = new Map<string, ItemInfo>();
+      if (loadedMods) {
+        for (const items of Object.values(loadedMods.items)) {
+          for (const item of items) {
+            itemLookup.set(item.id, item);
+          }
+        }
       }
-      setSlotStates(initial);
-      setShapeless(false);
-      setOutputCount(1);
+
+      const resolveItem = (itemId: string): ItemInfo | PlaceholderItem => {
+        const found = itemLookup.get(itemId);
+        if (found) return found;
+        return {
+          _placeholder: true,
+          id: itemId,
+          display_name: itemId,
+        } satisfies PlaceholderItem;
+      };
+
+      // Start from a fresh grid
+      const next = new Map<string, GridSlotState>();
+      for (const slot of config.slots) {
+        next.set(slot.id, { slotId: slot.id, item: null });
+      }
+
+      // Fill input slots
+      for (const inputSlot of recipe.inputs) {
+        const slotId = `input_${inputSlot.row}_${inputSlot.col}`;
+        if (next.has(slotId)) {
+          next.set(slotId, { slotId, item: resolveItem(inputSlot.item_id) });
+        }
+      }
+
+      // Fill output slot
+      const outputSlotId = "output_0";
+      if (next.has(outputSlotId)) {
+        next.set(outputSlotId, {
+          slotId: outputSlotId,
+          item: resolveItem(recipe.output_item_id),
+        });
+      }
+
+      setSlotStates(next);
+      setShapeless(recipe.recipe_type === "shapeless");
+      setOutputCount(recipe.count);
     },
-    [],
+    [config],
   );
 
   /** Build export request from current state */
@@ -104,6 +172,7 @@ export function useCraftingGrid(config: CraftingGridConfig) {
     clearSlot,
     clearAll,
     resetForConfig,
+    loadRecipe,
     setShapeless,
     setOutputCount,
     buildExportRequest,
@@ -111,3 +180,4 @@ export function useCraftingGrid(config: CraftingGridConfig) {
     isComplete,
   };
 }
+

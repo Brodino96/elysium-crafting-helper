@@ -1,6 +1,9 @@
 use serde::{Deserialize, Serialize};
 
+pub mod loader;
 pub mod vanilla_json;
+
+pub use loader::{load_recipes_from_dir, ParsedRecipe, RecipeFileEntry};
 
 /// A recipe slot as received from the frontend
 #[derive(Debug, Clone, Serialize, Deserialize)]

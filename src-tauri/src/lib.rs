@@ -17,6 +17,7 @@ pub fn run() {
             commands::export_recipe,
             commands::get_loaded_mods,
             commands::save_file,
+            commands::load_recipes_from_dir,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

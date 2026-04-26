@@ -4,7 +4,7 @@ use tauri::State;
 
 use crate::mod_loader;
 use crate::mod_loader::types::LoadedMods;
-use crate::recipe::{vanilla_json, ExportRecipeRequest};
+use crate::recipe::{vanilla_json, ExportRecipeRequest, RecipeFileEntry};
 
 /// Minimal representation of minecraftinstance.json (CurseForge format)
 #[derive(serde::Deserialize)]
@@ -235,4 +235,16 @@ pub fn get_loaded_mods(state: State<'_, AppState>) -> Result<LoadedMods, String>
 #[tauri::command]
 pub fn save_file(path: String, content: String) -> Result<(), String> {
     std::fs::write(&path, &content).map_err(|e| format!("Failed to write file {}: {}", path, e))
+}
+
+/// Load all crafting recipes from a directory (recursively).
+/// Only parses minecraft:crafting_shaped and minecraft:crafting_shapeless recipes.
+/// Other recipe types are silently skipped.
+#[tauri::command]
+pub fn load_recipes_from_dir(path: String) -> Result<Vec<RecipeFileEntry>, String> {
+    let dir = PathBuf::from(&path);
+    if !dir.exists() || !dir.is_dir() {
+        return Err(format!("Invalid directory: {}", dir.display()));
+    }
+    Ok(crate::recipe::load_recipes_from_dir(&dir))
 }
