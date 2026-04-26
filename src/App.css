@@ -3,8 +3,17 @@
    ============================================ */
 
 /* --- CSS Reset & Base --- */
-
 @import url('https://fonts.googleapis.com/css2?family=Silkscreen:wght@400;700&display=swap');
+
+/* Disable text selection and context menu */
+* {
+  user-select: none;
+  -webkit-user-select: none;
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
 
 :root {
   /* Minecraft-inspired dark palette */
@@ -46,13 +55,6 @@
   color: var(--text-primary);
   background-color: var(--bg-darkest);
 }
-
-* {
-  margin: 0;
-  padding: 0;
-  box-sizing: border-box;
-}
-
 /* Scrollbar styling */
 ::-webkit-scrollbar {
   width: 8px;
