@@ -66,7 +66,7 @@ jobs:
             bundles: deb,rpm,appimage
             artifact: linux-x86_64
           - os: windows-latest
-            bundles: nsis,msi,nsis:portable
+            bundles: nsis,msi
             artifact: windows-x86_64
           - os: macos-latest # arm64
             bundles: dmg,app
@@ -118,8 +118,41 @@ jobs:
             src-tauri/target/release/bundle/macos/*.app.zip
           if-no-files-found: ignore
 
+  build-portable-windows:
+    needs: prepare
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6.0.2
+        with:
+          ref: v${{ needs.prepare.outputs.version }}
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2.2.0
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-pc-windows-msvc
+
+      - name: Install cargo-xwin
+        run: cargo install --locked cargo-xwin
+
+      - name: Install frontend dependencies
+        run: bun install
+
+      - name: Build portable executable
+        run: bun run tauri build --runner cargo-xwin --target x86_64-pc-windows-msvc --bundles none
+
+      - name: Upload portable artifact
+        uses: actions/upload-artifact@v7.0.1
+        with:
+          name: bundles-windows-portable
+          path: src-tauri/target/x86_64-pc-windows-msvc/release/*.exe
+          if-no-files-found: error
+
   release:
-    needs: [prepare, build]
+    needs: [prepare, build, build-portable-windows]
     runs-on: ubuntu-latest
     steps:
       - name: Download all artifacts
@@ -146,11 +179,24 @@ jobs:
             -name "*.deb" -o \
             -name "*.rpm" -o \
             -name "*.AppImage" -o \
-            -name "*.exe" -o \
             -name "*.msi" -o \
             -name "*.dmg" -o \
             -name "*.app.zip" \
           \) | while read -r file; do
             echo "Uploading: $file"
             gh release upload "v${VERSION}" "$file" --repo "${{ github.repository }}"
+          done
+
+          find artifacts/bundles-windows-x86_64 -type f -name "*.exe" | while read -r file; do
+            echo "Uploading installer: $file"
+            gh release upload "v${VERSION}" "$file" --repo "${{ github.repository }}"
+          done
+
+          find artifacts/bundles-windows-portable -type f -name "*.exe" | while read -r file; do
+            filename=$(basename "$file")
+            name="${filename%.exe}"
+            portable_name="${name}_portable.exe"
+            cp "$file" "$(dirname "$file")/$portable_name"
+            echo "Uploading portable: $portable_name"
+            gh release upload "v${VERSION}" "$(dirname "$file")/$portable_name" --repo "${{ github.repository }}"
           done
