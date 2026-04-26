@@ -142,7 +142,7 @@ jobs:
         run: bun install
 
       - name: Build portable executable
-        run: bun run tauri build --runner cargo-xwin --target x86_64-pc-windows-msvc --bundles none
+        run: bun run tauri build --runner cargo-xwin --target x86_64-pc-windows-msvc
 
       - name: Upload portable artifact
         uses: actions/upload-artifact@v7.0.1
